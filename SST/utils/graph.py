@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import networkx as nx
 from scipy.sparse import find, csr_matrix
 
 
@@ -78,3 +79,59 @@ def reconstruct_ith_mst(T, E, ith=0):
         mst += E[ith]
 
     return mst
+
+def get_positive_degree_nodes(graph):
+    """
+    Function that given an adjacent matrix associated to a graph returns the nodes that has positive degree in the graph
+    Parameters
+    ----------
+    graph: NxN csr_matrix
+        Adjacent matrix representing graph
+    Returns
+    -------
+    nodes: M ndarray
+        Array containing id of nodes with positive degree
+    """
+
+    G = nx.from_scipy_sparse_matrix(graph)
+
+    nodes = np.array([x[0] if x[1]>0 else -1 for x in G.degree() ])
+
+    nodes = nodes[nodes>=0]
+
+    return nodes
+
+
+def get_subgraph(graph, nodes, return_map=False):
+    """
+    Function that given a graph and a list of nodes returns the sub graph restricted only to those nodes
+
+    Parameters
+    ----------
+    graph: NxN csr_matrix
+        Adjacent sparse matrix representing graph
+
+    nodes: M ndarray
+        Nodes of the restricted graph
+
+    return_map: bool
+        If True returns an object that allows to map any node in nodes to a node in the new matrix
+
+    Returns
+    -------
+    subgraph: MxM csr_matrix
+        Graph restricted only to nodes in nodes
+
+    backmap: dict
+        Dictionary that maps initial nodes to new nodes
+    """
+    # remark that the id of the nodes in this subgraph are remapped
+    if return_map:
+        cnodes = nodes.copy()
+        cnodes.sort()
+        backmap = { cnodes[i]:i for i in range(len(cnodes)) }
+
+        return graph[cnodes,:][:, cnodes], backmap
+
+    else:
+        return graph[nodes, :][:, nodes]

@@ -6,6 +6,8 @@ __all__= [
     'resize_graph',
     'shuffle_labels',
     'reconstruct_ith_mst',
+    'get_positive_degree_nodes',
+    'get_subgraph',
     'pixel_to_node',
     'node_to_pixel',
     'img_to_graph',
@@ -17,6 +19,6 @@ __all__= [
 ]
 
 
-from .graph import resize_graph, shuffle_labels, reconstruct_ith_mst
+from .graph import resize_graph, shuffle_labels, reconstruct_ith_mst, get_positive_degree_nodes, get_subgraph
 from .image import pixel_to_node, node_to_pixel, img_to_graph, plot_graph, plot_sub_graph, accumarray, label_image
 from .image import stick_two_images
