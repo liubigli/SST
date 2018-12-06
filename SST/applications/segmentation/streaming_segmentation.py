@@ -11,19 +11,47 @@ from ._morphological_segmentation import quasi_flat_zones
 from SST.streaming import streaming_spanning_tree
 
 
-def find_stable_and_unstable_nodes(e, cc, node_map):
+def map_nodes_to_sub_graph(graph, node_map):
     """
+    Function that maps all the nodes with a positive degree in given graph to a subgraph.
+    The mapping is defined by the dictionary node_map.
 
     Parameters
     ----------
-    e:  NxN csr_matrix
-        Adjacent matrix of the unstable edges
+    graph: csr_matrix
+        Adjacent matrix of graph
 
+    node_map: dict
+        Dictionary containing information for the mapping
+
+    Returns
+    -------
+    remapped_nodes: M ndarray
+        Array of the nodes in the subgraph
+    """
+
+    # retrieving all the nodes in the graph with a positive degree
+    nodes = get_positive_degree_nodes(graph)
+
+    # array of remapped nodes
+    remapped_nodes = np.array([node_map[node] for node in nodes])
+
+    return remapped_nodes
+
+
+def find_stable_and_unstable_nodes(cc, unstable_seed_nodes):
+    """
+    Method that returns two arrays. The first is made of nodes belongings to stable connected components, the second
+    is made of nodes belongings to unstable connected components.
+
+    Parameters
+    ----------
     cc: ndarray
         Connected components in the segmentation
 
-    node_map: dict
-        Dictionary that allows to map nodes in e to nodes of the compressed graph
+    unstable_seed_nodes: ndarray
+        Array containing nodes in the unstable part of the minimum spanning tree. Those nodes are seed to retrieve
+        all the unstable connected components.
 
     Returns
     -------
@@ -32,20 +60,19 @@ def find_stable_and_unstable_nodes(e, cc, node_map):
 
     unstable_cc_nodes:
         Array containing nodes that are unstable
+
     """
-    [e_src, e_dst, _] = find(e)
 
-    e_seed_nodes = np.unique(np.concatenate((e_src, e_dst)))
-
-    unstable_seed_nodes = np.array([node_map[e_node] for e_node in e_seed_nodes])
-
+    # array of labels that are unstable at the current iteration.
     unstable_labels = np.unique(cc[unstable_seed_nodes])
 
     # getting all the nodes contained in those cc
     all_nodes = np.arange(cc.shape[0])
-    # unstable cc
+
+    # nodes in the unstable connected components
     unstable_cc_nodes = np.concatenate([all_nodes[cc == label] for label in unstable_labels])
 
+    # nodes in the stable connected components
     stable_cc_nodes = np.setdiff1d(all_nodes, unstable_cc_nodes)
 
     return stable_cc_nodes, unstable_cc_nodes
@@ -82,11 +109,23 @@ def get_residual_graph(g, unstable_nodes, shape):
 
 def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
     """
+    Parameters
+    ----------
+    stream_generator: generator
+        Generator of the streaming.
+        At each iteration it should yield:
+            - the ith block of image
+            - the graph associated to the ith block of image
+            - the root id of the graph
+            - the ids of the vertices in the common border with the graph in the next iteration
 
-    :param stream_generator:
-    :param threshold:
-    :param return_img:
-    :return:
+    threshold: float
+        Value used to remove edges of the minimum spanning tree. All the edges whose weight is above threshold value
+        are removed.
+
+    return_img: bool
+        If true at each iteration the function yields also the current image in the streaming
+
     """
     # generator of minimum spanning tree streaming
     mst_generator = streaming_spanning_tree(stream_generator, return_img=True)
@@ -116,11 +155,11 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
                 # in the first iteration we do not have to remap nodes
                 qf_labels = quasi_flat_zones((t+e), threshold)
 
+                # get nodes with positive degree in e
+                remapped_e_nodes = get_positive_degree_nodes(e)
+
                 # find stable and unstable connected components
-                # stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(e, qf_labels, np.arange(len(qf_labels)))
-                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(e,
-                                                                              qf_labels,
-                                                                              {i: i for i in range(len(qf_labels))})
+                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(qf_labels, remapped_e_nodes)
 
                 # removing unstable connected components from qf_labels and keeping only the stable ones
                 qf_labels = qf_labels[stable_nodes]
@@ -150,18 +189,23 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
 
                 nodes = get_positive_degree_nodes(current_graph)
 
+                # compressing current graph in order to deal with less information in memory
                 g, map_nodes = get_subgraph(current_graph, nodes, return_map=True)
 
                 # computing quasi flat zones
                 qf_labels = quasi_flat_zones(g, threshold) + min_val_label
 
+                # remapping nodes in graph e to nodes in sub graph g
+                remapped_e_nodes = map_nodes_to_sub_graph(e, map_nodes)
+
                 # find stable and unstable connected components
-                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(e, qf_labels, map_nodes)
+                # stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(e, qf_labels, map_nodes)
+                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(qf_labels, remapped_e_nodes)
 
                 # removing unstable connected components from qf_labels and keeping only the stable ones
                 qf_labels = qf_labels[stable_nodes]
 
-                # remapping stable nodes
+                # remapping stable nodes to the initial graph
                 stable_nodes = nodes[stable_nodes]
 
                 res_graph = get_residual_graph(current_graph, nodes[unstable_nodes], t.shape)
@@ -171,6 +215,137 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
 
         # fetching array of segmented nodes
         segmentation = np.vstack((stable_nodes, qf_labels))
+
+        if return_img:
+            yield segmentation, i
+        else:
+            yield segmentation
+
+
+def get_all_nodes_but_well(g, id_well):
+    """
+    Function that return all nodes with a positive degree in graph except for the well node.
+
+    Parameters
+    ----------
+    g: csr_matrix
+        Adjacent matrix of the graph g
+    id_well: int
+        Id of the well node
+
+    Returns
+    -------
+    nodes: ndarray
+        list of nodes in g
+    """
+    # collecting all the nodes
+    nodes = get_positive_degree_nodes(g)
+
+    # returning all the ids except for the well
+    return np.setdiff1d(nodes, id_well)
+
+
+def marker_flooding_streaming(stream_generator, return_img=False):
+    """
+    Streaming version of the watershed algorithm on graph.
+    See as reference Jean Cousty et Al. ( https://hal.inria.fr/hal-01113462/document )
+    This function is analogous to quasi_flat_streaming function
+
+    Parameters
+    ---------
+    stream_generator:
+        Generator for streaming image and markers.
+        At each iteration it should yield:
+            - the ith block of image
+            - the graph associated to the ith block of image
+            - the root id of the graph
+            - the ids of the vertices in the common border with the graph in the next iteration
+
+    return_img: bool
+        If true at each iteration the function yields also the current image in the streaming
+    """
+    # TODO: probably this code can be merged with the one in quasi_flat_zone_streaming
+    mst_generator = streaming_spanning_tree(stream_generator, return_img=True)
+
+    # residual graph
+    res_graph = None
+
+    # minimum value for labels
+    min_val_label = 1
+    for n, (t, e, i) in enumerate(mst_generator):
+        if n == 0:
+            # we suppose that the well node is the last node
+            id_ext_node = t.shape[0] - 1
+
+            if e is None:  # patological case in which the stream is made by only one iteration
+                # Remark in this case id_ext_node = t.shape[0] - 1
+                ncc, labels = connected_components(t[:id_ext_node, :id_ext_node], directed=False)
+                stable_nodes = np.arange(len(labels))
+            else:
+
+                e_nodes = get_all_nodes_but_well(e, id_ext_node)
+                t_nodes = get_all_nodes_but_well(t+e, id_ext_node)
+
+                # taking all the nodes except id_ext_node
+                nodes = np.unique(np.concatenate((e_nodes, t_nodes)))
+
+                g = get_subgraph(t+e, nodes)
+
+                _, labels = connected_components(g, directed=False)
+
+                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(labels, e_nodes)
+
+                labels = labels[stable_nodes]
+
+                res_graph = get_residual_graph((t+e), unstable_nodes, t.shape)
+                # update res_graph and yield connected components
+
+        else:
+            if e is None:  # last iteration
+                current_graph = t.maximum(res_graph)
+
+                # collecting nodes with a positive degree
+                nodes = get_all_nodes_but_well(current_graph, id_well=id_ext_node)
+
+                # extracting subgraph containing info only on those nodes
+                g, map_nodes = get_subgraph(current_graph, nodes, return_map=True)
+
+                # computing connected components
+                ncc, labels = connected_components(g, directed=False)
+                labels += min_val_label
+
+                stable_nodes = nodes
+
+            else:
+                current_graph = t.maximum(e).maximum(res_graph)
+
+                nodes = get_all_nodes_but_well(current_graph, id_ext_node)
+                e_nodes = get_all_nodes_but_well(e, id_ext_node)
+                # compressing current graph in order to deal with less information in memory
+                g, map_nodes = get_subgraph(current_graph, nodes, return_map=True)
+
+                # computing quasi flat zones
+                ncc, labels = connected_components(g, directed=False)
+                labels += min_val_label
+
+                # remapping nodes in graph e to nodes in sub graph g
+                remapped_e_nodes = np.array([map_nodes[e_node] for e_node in e_nodes])
+
+                # find stable and unstable connected components
+                # stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(e, qf_labels, map_nodes)
+                stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(labels, remapped_e_nodes)
+
+                # removing unstable connected components from qf_labels and keeping only the stable ones
+                labels = labels[stable_nodes]
+
+                # remapping stable nodes to the initial graph
+                stable_nodes = nodes[stable_nodes]
+
+                res_graph = get_residual_graph(current_graph, nodes[unstable_nodes], t.shape)
+
+        min_val_label = labels.max() + 1
+
+        segmentation = np.vstack((stable_nodes, labels))
 
         if return_img:
             yield segmentation, i
