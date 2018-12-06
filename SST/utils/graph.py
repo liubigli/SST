@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import networkx as nx
 from scipy.sparse import find, csr_matrix
 
 
@@ -80,24 +79,26 @@ def reconstruct_ith_mst(T, E, ith=0):
 
     return mst
 
+
 def get_positive_degree_nodes(graph):
     """
     Function that given an adjacent matrix associated to a graph returns the nodes that has positive degree in the graph
+
     Parameters
     ----------
     graph: NxN csr_matrix
         Adjacent matrix representing graph
+
     Returns
     -------
     nodes: M ndarray
         Array containing id of nodes with positive degree
+
     """
 
-    G = nx.from_scipy_sparse_matrix(graph)
+    src, dst, _ = find(graph)
 
-    nodes = np.array([x[0] if x[1]>0 else -1 for x in G.degree() ])
-
-    nodes = nodes[nodes>=0]
+    nodes = np.unique(np.concatenate((src, dst)))
 
     return nodes
 
@@ -129,9 +130,9 @@ def get_subgraph(graph, nodes, return_map=False):
     if return_map:
         cnodes = nodes.copy()
         cnodes.sort()
-        backmap = { cnodes[i]:i for i in range(len(cnodes)) }
+        backmap = {cnodes[i]: i for i in range(len(cnodes))}
 
-        return graph[cnodes,:][:, cnodes], backmap
+        return graph[cnodes, :][:, cnodes], backmap
 
     else:
         return graph[nodes, :][:, nodes]
