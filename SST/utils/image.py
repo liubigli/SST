@@ -260,7 +260,7 @@ def plot_graph(img, graphs,
         labels = [labels]
 
     if colors is None:
-        colors = ['r', 'b', 'g', 'k', 'm']
+        colors = ['g', 'r', 'b', 'k', 'm']
 
     nr, nc = img.shape[:2]
     n_plots = min(len(graphs), len(colors))
