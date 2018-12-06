@@ -27,7 +27,7 @@ def streaming_spanning_tree(streaming_generator, return_img=False):
         if e is None:
             t = minimum_spanning_tree(graph)
         else:
-
+            # we assume that the size of the graph increases during the iterations
             e = resize_graph(e, graph.shape)
             graph = graph.multiply(graph > 0).maximum(e.multiply(e > 0)) + \
                     graph.multiply(graph < 0).minimum(e.multiply(e < 0))
