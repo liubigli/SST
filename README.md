@@ -2,7 +2,7 @@
 
 ### ON MINIMUM SPANNING TREE STREAMING FOR IMAGE ANALYSIS
 
-This repository contains all the code implemented and used for the paper
+This repository contains the code implemented and used in the paper
 
 ["Minumum spanning tree streaming for image analysis"](http://cmm.ensmp.fr/~marcoteg/cv/publi_pdf/gigli/20180525_ICIP18_StreamingMst.pdf)
 
@@ -13,7 +13,7 @@ All the code has been developed using python 3.5.6.
  we do not guarantee retro compatibility with previous version
  of python.*
 
-To build the project open a shell, go the folder project and type:
+To build the project open a shell, go the project folder and type:
 
 ```commandline
 python setup.py build_ext --inplace
