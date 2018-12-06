@@ -4,9 +4,9 @@ from __future__ import print_function
 
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy.sparse import csr_matrix, find
 
-from SST.utils import img_to_graph
-
+from SST.utils import img_to_graph, resize_graph
 
 class AbstractImageStreamingGenerator(ABC):
     """
@@ -45,30 +45,49 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
         max_it = np.ceil((nc - b_nc) / (b_nc - 1)).astype(np.int) + 1
 
         # initializing min_col for the first iteration
-        min_col = 0
+        it_min_col = 0
+
+        # additional input parameter
+        all_markers = kwargs.get('markers', None)
+
+        id_ext_node = nr*nc
 
         for i in range(max_it):
             # max col of the ith img
-            max_col = min((b_nc * (i+1)) - i, nc)
+            ith_max_col = min((b_nc * (i+1)) - i, nc)
 
             # getting ith block
-            img = self.img[:b_nr, min_col:max_col]
+            img = self.img[:b_nr, it_min_col:ith_max_col]
 
             # case for the grayscale image
             if nz == 1:
                 img = img[:, :, 0]
 
             # getting graph associated to ith image block
-            g = img_to_graph(img, order='F', col_offset=min_col)
+            g = img_to_graph(img, order='F', col_offset=it_min_col)
 
             # id root node for the ith tree
-            root = b_nr * (max_col - 1) if i < max_it - 1 else None
+            root = b_nr * (ith_max_col - 1) if i < max_it - 1 else None
 
             # id nodes front for the ith iteration
-            front_nodes = np.arange(b_nr * (max_col - 1), b_nr * max_col, dtype=int) if i < max_it - 1 else None
+            front_nodes = np.arange(b_nr * (ith_max_col - 1), b_nr * ith_max_col, dtype=int) if i < max_it - 1 else None
+
+            if all_markers is not None:  # case segmentation with markers
+                # fetching markers in current image block
+                markers_in_block = all_markers[(all_markers > (it_min_col * b_nr - 1)) & (all_markers < ith_max_col * b_nr)]
+
+                if len(markers_in_block) > 0:
+                    # adding links between markers and ext_node to the graph
+                    g = add_marker(g, id_ext_node, markers_in_block)
+                else:
+                    g = resize_graph(g, (id_ext_node + 1, id_ext_node + 1))
+
+                if front_nodes is not None:
+                    # we have to add a node in the frontier
+                    front_nodes = np.concatenate([front_nodes, [id_ext_node]])
 
             # updating min col for the next iteration
-            min_col = max_col - 1
+            it_min_col = ith_max_col - 1
 
             yield img, g, root, front_nodes
 
@@ -99,6 +118,11 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
         # initilizing ith_min_row
         ith_min_row = 0
 
+        # additional input parameter
+        all_markers = kwargs.get('markers', None)
+
+        id_ext_node = nr*nc
+
         for i in range(max_it):
             # computing ith max row
             ith_max_row = min((b_nr * (i + 1)) - i, nr)
@@ -116,7 +140,70 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
             front_nodes = np.arange(b_nc * (ith_max_row - 1), b_nc * ith_max_row, dtype=np.int32) if i < max_it - 1 \
                 else None
 
+            if all_markers is not None:  # case segmentation with markers
+                # fetching markers in current image block
+                markers_in_block = all_markers[(all_markers > (ith_min_row * b_nc - 1)) & (all_markers < ith_max_row* b_nc)]
+
+                if len(markers_in_block) > 0:
+                    # adding links between markers and ext_node to the graph
+                    g = add_marker(g, id_ext_node, markers_in_block)
+                else:
+                    g = resize_graph(g, (id_ext_node + 1, id_ext_node + 1))
+
+                if front_nodes is not None:
+                    # we have to add a node in the frontier
+                    front_nodes = np.concatenate([front_nodes, [id_ext_node]])
+
             # updating ith min row
             ith_min_row = ith_max_row - 1
             # yielding img
             yield img, g, root, front_nodes
+
+
+def add_marker(g, id_ext_node, index_markers, gshape=None):
+    """
+    Function that link edges between the external node and the markers
+
+    Parameters
+    ----------
+    g: NxN csr_matrix
+        adjacency matrix of a graph g
+
+    id_ext_node: int
+        id for the external node (i.e. id of the well in the Watershed algorithm on graph)
+
+    index_markers: M ndarray
+        arrays containing the ids of the markers
+
+    gshape: tuple
+        shape of the graph g
+
+    Returns
+    -------
+    G: csr_matrix
+        adjacency matrix of modified graph
+    """
+    # implemented by Santiago-Velasco-Forero
+    if gshape is None:
+        # by default we define gshape as the max between
+        #  the shape of the graph and the id of external node
+        gsize = max(id_ext_node+1, g.shape[0])
+        gshape = (gsize, gsize)
+
+    [ix, iy, v] = find(g)
+    # selecting markers to add
+    # ix_markers = np.intersect1d(ix, index_markers)
+    # iy_markers = np.intersect1d(iy, index_markers)
+    # markers_to_add = np.union1d(ix_markers, iy_markers)
+
+    # adding edges that connect the markers with the external node
+    ix = np.concatenate([ix, index_markers])
+
+    iy = np.concatenate([iy, np.ones(len(index_markers)) * id_ext_node])
+
+    v = np.concatenate([v, -np.ones(len(index_markers))])
+
+    # G is the new graph
+    G = csr_matrix((v, (ix, iy)), shape=gshape)
+
+    return G
