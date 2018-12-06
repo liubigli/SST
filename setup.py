@@ -5,7 +5,9 @@ import numpy as np
 
 ext_modules = [
     Extension("SST.streaming.graph._traverse",
-              ["SST/streaming/graph/_traverse.pyx"])
+              ["SST/streaming/graph/_traverse.pyx"]),
+    Extension("SST.hierarchy._mst_based_hierarchy",
+              ["SST/hierarchy/_mst_based_hierarchy.pyx"])
 ]
 
 setup(
