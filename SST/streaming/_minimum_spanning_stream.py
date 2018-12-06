@@ -3,7 +3,7 @@ from SST.streaming.graph import get_half_cycle
 from SST.utils import resize_graph
 
 
-def streaming_spanning_tree(streaming_generator):
+def streaming_spanning_tree(streaming_generator, return_img=False):
     """
     Function that implement our streaming version of minimum spanning tree
 
@@ -17,6 +17,8 @@ def streaming_spanning_tree(streaming_generator):
             - the root id of the graph
             - the ids of the vertices in the common border with the graph in the next iteration
 
+    return_img: bool
+        If true the algorithm yield also ith image in the generator otherwise no. Default is False
     """
     e = None
 
@@ -25,8 +27,11 @@ def streaming_spanning_tree(streaming_generator):
         if e is None:
             t = minimum_spanning_tree(graph)
         else:
+
             e = resize_graph(e, graph.shape)
-            t = minimum_spanning_tree(graph.maximum(e))
+            graph = graph.multiply(graph > 0).maximum(e.multiply(e > 0)) + \
+                    graph.multiply(graph < 0).minimum(e.multiply(e < 0))
+            t = minimum_spanning_tree(graph)
 
         if front is not None:
             e = get_half_cycle(t, root, front)
@@ -34,4 +39,8 @@ def streaming_spanning_tree(streaming_generator):
         else:
             e = None
 
-        yield img, t, e
+        if return_img:
+            yield t, e, img
+
+        else:
+            yield t, e
