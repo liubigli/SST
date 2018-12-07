@@ -18,7 +18,7 @@ def streaming_spanning_tree(streaming_generator, return_img=False):
             - the ids of the vertices in the common border with the graph in the next iteration
 
     return_img: bool
-        If true the algorithm yield also ith image in the generator otherwise no. Default is False
+        If true the algorithm yields also ith image in the generator otherwise no. Default is False
     """
     e = None
 
