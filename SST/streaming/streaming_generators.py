@@ -50,6 +50,10 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
         # additional input parameter
         all_markers = kwargs.get('markers', None)
 
+        # if this parameter is True it returns also a map that associate
+        # at each pixel in the ith image a node in the graph g
+        return_map = kwargs.get('return_map', False)
+
         id_ext_node = nr*nc
 
         for i in range(max_it):
@@ -86,10 +90,19 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
                     # we have to add a node in the frontier
                     front_nodes = np.concatenate([front_nodes, [id_ext_node]])
 
+            if return_map:
+                min_val_node = b_nr*ith_max_col
+                max_val_node = b_nr*(it_min_col + b_nc) if i < max_it - 1 else nr*nc
+                # map that associate at each pixel in the ith image a node in the graph g
+                map_px_to_nodes = np.arange(min_val_node, max_val_node).reshape((b_nr, b_nc), order='F')
+
             # updating min col for the next iteration
             it_min_col = ith_max_col - 1
 
-            yield img, g, root, front_nodes
+            if return_map:
+                yield (img, map_px_to_nodes), g, root, front_nodes
+            else:
+                yield img, g, root, front_nodes
 
 
 class VerticalStreaming(AbstractImageStreamingGenerator):
@@ -120,6 +133,10 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
 
         # additional input parameter
         all_markers = kwargs.get('markers', None)
+
+        # if this parameter is True it returns also a map that associate
+        # at each pixel in the ith image a node in the graph g
+        return_map = kwargs.get('return_map', False)
 
         id_ext_node = nr*nc
 
@@ -154,10 +171,20 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
                     # we have to add a node in the frontier
                     front_nodes = np.concatenate([front_nodes, [id_ext_node]])
 
+            if return_map:
+                min_val_node = b_nc * ith_min_row
+                max_val_node = b_nc * (ith_min_row + b_nr) if i < max_it - 1 else nr * nc
+                # map that associate at each pixel in the ith image a node in the graph g
+                map_px_to_nodes = np.arange(min_val_node, max_val_node).reshape((b_nr, b_nc))
+
             # updating ith min row
             ith_min_row = ith_max_row - 1
+
             # yielding img
-            yield img, g, root, front_nodes
+            if return_map:
+                yield (img, map_px_to_nodes), g, root, front_nodes
+            else:
+                yield img, g, root, front_nodes
 
 
 def add_marker(g, id_ext_node, index_markers, gshape=None):
