@@ -7,7 +7,7 @@ from scipy.sparse import find, csr_matrix
 from scipy.sparse.csgraph import connected_components
 
 from SST.utils import resize_graph, get_positive_degree_nodes, get_subgraph
-from ._morphological_segmentation import quasi_flat_zones
+from ._morphological_segmentation import quasi_flat_zones, alpha_omega_constrained_connectivity
 from SST.streaming import streaming_spanning_tree
 
 
@@ -107,7 +107,7 @@ def get_residual_graph(g, unstable_nodes, shape):
     return res_graph
 
 
-def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
+def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False, return_stable_graph=False):
     """
     Parameters
     ----------
@@ -124,7 +124,10 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
         are removed.
 
     return_img: bool
-        If true at each iteration the function yields also the current image in the streaming
+        If True at each iteration the function yields also the current image in the streaming
+
+    return_stable_graph: bool
+        If True at each iteration the function yields also the stable graph in the minimum spanning stream
 
     """
     # generator of minimum spanning tree streaming
@@ -166,12 +169,18 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
 
                 res_graph = get_residual_graph((t+e), unstable_nodes, t.shape)
 
+            # graph made of stable nodes
+            stable_graph = t
+
         else:  # common iteration
             # reshaping graph
             res_graph = resize_graph(res_graph, t.shape)
 
+            # graph made of stable nodes
+            stable_graph = t.maximum(res_graph)
+
             if e is None:  # last iteration
-                current_graph = t.maximum(res_graph)
+                current_graph = stable_graph
 
                 # collecting only nodes with a positive degree
                 nodes = get_positive_degree_nodes(current_graph)
@@ -185,7 +194,7 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
                 stable_nodes = nodes
 
             else:
-                current_graph = t.maximum(e).maximum(res_graph)
+                current_graph = stable_graph.maximum(e)
 
                 nodes = get_positive_degree_nodes(current_graph)
 
@@ -216,10 +225,20 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False):
         # fetching array of segmented nodes
         segmentation = np.vstack((stable_nodes, qf_labels))
 
+        # auxiliary variable
+        to_yield = (segmentation, )
+
         if return_img:
-            yield segmentation, i
-        else:
+            to_yield += (i, )
+
+        if return_stable_graph:
+            to_yield += (stable_graph, )
+
+        if not(return_img or return_stable_graph):
             yield segmentation
+
+        else:
+            yield to_yield
 
 
 def get_all_nodes_but_well(g, id_well):
@@ -351,3 +370,135 @@ def marker_flooding_streaming(stream_generator, return_img=False):
             yield segmentation, i
         else:
             yield segmentation
+
+
+def fetch_pixel_values(img, map_pixels_to_nodes):
+    """
+
+    :param img:
+    :param map_pixels_to_nodes:
+    :return:
+    """
+    i_sort = map_pixels_to_nodes.flatten().argsort()
+
+    if len(img.shape) > 2:  # coloured img
+        pixel_values = img.reshape((-1, img.shape[2]))
+    else:
+        pixel_values = img.flatten()
+
+    return pixel_values[i_sort]
+
+
+def fetch_alpha_omega_cc(stable_graph, pixel_values, alpha, omega, alpha_seg):
+    """
+
+    Parameters
+    ----------
+    stable_graph: csr_matrix
+        Adjacent matrix representing the graph of stable connected components in the alpha-segmentation
+    pixel_values: ndarray
+        Values of the image at the stable pixels
+    alpha: float
+        threshold used to compute the alpha-quasi-flat-zones
+    omega:
+        threshold used as further condition on the alpha-quasi-flat-zones
+    alpha_seg: 2xN ndarray
+        Array containing in the first rows the ids of the nodes in the alpha cc, and in the second row their labels of
+        the alpha-quasi-flat-zones
+
+    Returns
+    -------
+    alpha_omega_seg: 2XN ndarray
+        Array containing in the first rows the ids of the nodes in the alpha cc, and in the second row their labels of
+        the alpha-omega-cc
+    """
+    unique_labels, counts = np.unique(alpha_seg[1], return_counts=True)
+    min_val_label = 0
+    alpha_omega_seg = None
+
+    # TODO: THIS CYCLE CAN BE EXECUTED IN PARALLEL
+    for n, (l, c) in enumerate(zip(unique_labels, counts)):
+
+        # getting nodes with alpha-labels equal to l
+        nodes = alpha_seg[0][alpha_seg[1] == l]
+
+        if c > 1:
+            # only in case the connected components is bigger than one element we compute further seg
+            if (pixel_values[nodes].max() - pixel_values[nodes].min()) > omega:
+                g = stable_graph[nodes, :][:, nodes]
+                alpha_omega_labels = alpha_omega_constrained_connectivity(g, pixel_values[nodes], alpha, omega)
+                alpha_omega_labels += min_val_label
+            else:
+                alpha_omega_labels = min_val_label * np.ones(len(nodes))
+
+        else:  # in this case we append the cc to the current segmented nodes
+            alpha_omega_labels = min_val_label
+
+        alpha_omega_cc = np.vstack((nodes, alpha_omega_labels))
+
+        if n == 0:
+            alpha_omega_seg = alpha_omega_cc
+        else:
+            alpha_omega_seg = np.concatenate((alpha_omega_seg, alpha_omega_cc), axis=1)
+
+        min_val_label = alpha_omega_cc.max() + 1
+
+    return alpha_omega_seg
+
+
+def alpha_omega_cc_streaming(stream_generator, alpha, omega, return_img=True):
+    """
+    Function that implements alpha omega constrained connectivity for a stream of images
+
+    Parameters
+    ----------
+    stream_generator:
+        Generator for streaming image and markers.
+        At each iteration it should yield:
+            - the ith block of image
+            - the graph associated to the ith block of image
+            - the root id of the graph
+            - the ids of the vertices in the common border with the graph in the next iteration
+
+    alpha: float
+        Value used to compute alpha-quasi-flat-zones of the graph
+
+    omega: ndarray
+        Value used to split each alpha flat zone using further criteria (as for example the range)
+
+    return_img: bool
+        If true at each iteration the function yields also the current image in the streaming
+
+    """
+
+    # The first step of this method consist to compute alpha-quasi-flat zones of the streaming graph,
+    # so we can reuse the function implemented above
+    alpha_qfz_stream = quasi_flat_zone_streaming(stream_generator, alpha, return_img=True, return_stable_graph=True)
+
+    total_val = None
+    min_val_label = 0
+    for n, (segmentation, img_and_map, t) in enumerate(alpha_qfz_stream):
+
+        # TODO: ADD A FUNCTION TO SPLIT IMG AND MAP BETWEEN TREATED AND NOT YET TREATED PIXELS
+        # once we have the quasi flat zone we can compute further segmentation
+        img = img_and_map[0]
+        map_px_to_node = img_and_map[1]
+        pixel_values = fetch_pixel_values(img, map_px_to_node)
+        # increasing
+        segmentation[1] += min_val_label
+
+        if n == 0:
+            total_val = pixel_values
+        else:
+            total_val = np.concatenate((total_val, pixel_values))
+
+        alpha_omega_seg = fetch_alpha_omega_cc(t, total_val, alpha, omega, segmentation)
+
+        alpha_omega_seg[1] += min_val_label
+
+        min_val_label = alpha_omega_seg[1].max() + 1
+
+        if return_img:
+            yield alpha_omega_seg, img
+        else:
+            yield alpha_omega_seg
