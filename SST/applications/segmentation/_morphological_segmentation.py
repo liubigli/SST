@@ -122,4 +122,4 @@ def alpha_omega_constrained_connectivity(minimum_spanning_tree, pixels_values, a
     # the resulting segmentation is made by the connected components of the segmented graph
     ncc, labels = connected_components(seg_graph, directed=False)
 
-    return shuffle_labels(labels)
+    return shuffle_labels(labels).astype(int)
