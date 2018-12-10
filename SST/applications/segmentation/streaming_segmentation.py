@@ -441,9 +441,9 @@ def fetch_alpha_omega_cc(stable_graph, pixel_values, alpha, omega, alpha_seg):
         else:
             alpha_omega_seg = np.concatenate((alpha_omega_seg, alpha_omega_cc), axis=1)
 
-        min_val_label = alpha_omega_cc.max() + 1
+        min_val_label = alpha_omega_cc[1].max().astype(int) + 1
 
-    return alpha_omega_seg
+    return alpha_omega_seg.astype(int)
 
 
 def alpha_omega_cc_streaming(stream_generator, alpha, omega, return_img=True):
@@ -485,7 +485,7 @@ def alpha_omega_cc_streaming(stream_generator, alpha, omega, return_img=True):
         map_px_to_node = img_and_map[1]
         pixel_values = fetch_pixel_values(img, map_px_to_node)
         # increasing
-        segmentation[1] += min_val_label
+        # segmentation[1] += min_val_label
 
         if n == 0:
             total_val = pixel_values
@@ -496,7 +496,7 @@ def alpha_omega_cc_streaming(stream_generator, alpha, omega, return_img=True):
 
         alpha_omega_seg[1] += min_val_label
 
-        min_val_label = alpha_omega_seg[1].max() + 1
+        min_val_label = alpha_omega_seg[1].max().astype(int) + 1
 
         if return_img:
             yield alpha_omega_seg, img
