@@ -17,22 +17,41 @@ class AbstractImageStreamingGenerator(ABC):
         super(AbstractImageStreamingGenerator, self).__init__()
 
     @abstractmethod
-    def generate_stream(self, block_shape, **kwargs):
-        pass
-
-
-class HorizontalStreaming(AbstractImageStreamingGenerator):
-    def generate_stream(self, block_shape, **kwargs):
+    def generate_stream(self, block_shape, markers=None, return_map=False):
         """
-        Function that generate an Horizontal stream of image all with the same size.
+        Function that generates a stream of images all of the same dimension.
 
         Parameters
         ----------
         block_shape: tuple
-            Size of the image block
+            Size of the block image
 
-        kwargs: dict
-            additional parameters
+        markers: list
+            List of markers in the image
+
+        return_map: bool (default False)
+            If true the method should yields also an additional image that represent a map between image pixels and
+            nodes of the graph associated to the image.
+        """
+        pass
+
+
+class HorizontalStreaming(AbstractImageStreamingGenerator):
+    def generate_stream(self, block_shape, markers=None, return_map=False):
+        """
+        Function that generate a Horizontal stream of image all with the same size.
+
+        Parameters
+        ----------
+        block_shape: tuple
+            Size of the block image
+
+        markers: list
+            List of markers in the image
+
+        return_map: bool (default False)
+            If true the method should yields also an additional image that represent a map between image pixels and
+            nodes of the graph associated to the image.
 
         """
         # image size
@@ -45,14 +64,7 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
         max_it = np.ceil((nc - b_nc) / (b_nc - 1)).astype(np.int) + 1
 
         # initializing min_col for the first iteration
-        it_min_col = 0
-
-        # additional input parameter
-        all_markers = kwargs.get('markers', None)
-
-        # if this parameter is True it returns also a map that associate
-        # at each pixel in the ith image a node in the graph g
-        return_map = kwargs.get('return_map', False)
+        ith_min_col = 0
 
         id_ext_node = nr*nc
 
@@ -61,14 +73,14 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
             ith_max_col = min((b_nc * (i+1)) - i, nc)
 
             # getting ith block
-            img = self.img[:b_nr, it_min_col:ith_max_col]
+            img = self.img[:b_nr, ith_min_col:ith_max_col]
 
             # case for the grayscale image
             if nz == 1:
                 img = img[:, :, 0]
 
             # getting graph associated to ith image block
-            g = img_to_graph(img, order='F', col_offset=it_min_col)
+            g = img_to_graph(img, order='F', col_offset=ith_min_col)
 
             # id root node for the ith tree
             root = b_nr * (ith_max_col - 1) if i < max_it - 1 else None
@@ -76,9 +88,9 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
             # id nodes front for the ith iteration
             front_nodes = np.arange(b_nr * (ith_max_col - 1), b_nr * ith_max_col, dtype=int) if i < max_it - 1 else None
 
-            if all_markers is not None:  # case segmentation with markers
+            if markers is not None:  # case segmentation with markers
                 # fetching markers in current image block
-                markers_in_block = all_markers[(all_markers > (it_min_col * b_nr - 1)) & (all_markers < ith_max_col * b_nr)]
+                markers_in_block = markers[(markers > (ith_min_col * b_nr - 1)) & (markers < ith_max_col * b_nr)]
 
                 if len(markers_in_block) > 0:
                     # adding links between markers and ext_node to the graph
@@ -91,13 +103,17 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
                     front_nodes = np.concatenate([front_nodes, [id_ext_node]])
 
             if return_map:
-                min_val_node = b_nr*ith_max_col
-                max_val_node = b_nr*(it_min_col + b_nc) if i < max_it - 1 else nr*nc
+                min_val_node = b_nr * ith_min_col
+                max_val_node = b_nr * (ith_min_col + b_nc) if i < max_it - 1 else nr*nc
                 # map that associate at each pixel in the ith image a node in the graph g
-                map_px_to_nodes = np.arange(min_val_node, max_val_node).reshape((b_nr, b_nc), order='F')
+                map_px_to_nodes = np.arange(min_val_node, max_val_node)
 
+                if i < max_it - 1:
+                    map_px_to_nodes = map_px_to_nodes.reshape((b_nr, b_nc), order='F')
+                else:
+                    map_px_to_nodes = map_px_to_nodes.reshape((b_nr, nc - ith_min_col), order='F')
             # updating min col for the next iteration
-            it_min_col = ith_max_col - 1
+            ith_min_col = ith_max_col - 1
 
             if return_map:
                 yield (img, map_px_to_nodes), g, root, front_nodes
@@ -106,17 +122,21 @@ class HorizontalStreaming(AbstractImageStreamingGenerator):
 
 
 class VerticalStreaming(AbstractImageStreamingGenerator):
-    def generate_stream(self, block_shape, **kwargs):
+    def generate_stream(self, block_shape, markers=None, return_map=False):
         """
-        Function that generate an Horizontal stream of image all with the same size.
+        Function that generate a vertical stream of image all with the same size.
 
         Parameters
         ----------
         block_shape: tuple
-            Size of the image block
+            Size of the block image
 
-        kwargs: dict
-            additional parameters
+        markers: list
+            List of markers in the image
+
+        return_map: bool (default False)
+            If true the method should yields also an additional image that represent a map between image pixels and
+            nodes of the graph associated to the image.
 
         """
 
@@ -132,11 +152,7 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
         ith_min_row = 0
 
         # additional input parameter
-        all_markers = kwargs.get('markers', None)
-
-        # if this parameter is True it returns also a map that associate
-        # at each pixel in the ith image a node in the graph g
-        return_map = kwargs.get('return_map', False)
+        all_markers = markers
 
         id_ext_node = nr*nc
 
@@ -174,8 +190,14 @@ class VerticalStreaming(AbstractImageStreamingGenerator):
             if return_map:
                 min_val_node = b_nc * ith_min_row
                 max_val_node = b_nc * (ith_min_row + b_nr) if i < max_it - 1 else nr * nc
+
                 # map that associate at each pixel in the ith image a node in the graph g
-                map_px_to_nodes = np.arange(min_val_node, max_val_node).reshape((b_nr, b_nc))
+                map_px_to_nodes = np.arange(min_val_node, max_val_node)
+
+                if i < max_it:
+                    map_px_to_nodes = map_px_to_nodes.reshape((b_nr, b_nc))
+                else:
+                    map_px_to_nodes = map_px_to_nodes.reshape((nr - ith_min_row, b_nc))
 
             # updating ith min row
             ith_min_row = ith_max_row - 1
@@ -210,6 +232,7 @@ def add_marker(g, id_ext_node, index_markers, gshape=None):
     G: csr_matrix
         adjacency matrix of modified graph
     """
+
     # implemented by Santiago-Velasco-Forero
     if gshape is None:
         # by default we define gshape as the max between
