@@ -136,3 +136,29 @@ def get_subgraph(graph, nodes, return_map=False):
 
     else:
         return graph[nodes, :][:, nodes]
+
+
+def merge_graphs(graphs):
+    """
+    Function that takes two graphs and returns its union.
+
+    Parameters
+    ----------
+    graphs: tuple of NxN csr_matrix
+        A tuple of graphs
+
+    Returns
+    -------
+    graph: NxN csr_matrix
+        Union of graph1 and graph2
+    """
+    graph = None
+
+    for n, g in enumerate(graphs):
+        if n == 0:
+            graph = g
+        else:
+            graph = graph.multiply(graph > 0).maximum(g.multiply(g > 0)) + \
+                        graph.multiply(graph < 0).minimum(g.multiply(g < 0))
+
+    return graph
