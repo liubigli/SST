@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import find, csr_matrix
 from scipy.sparse.csgraph import connected_components
 
-from SST.utils import resize_graph, get_positive_degree_nodes, get_subgraph
+from SST.utils import resize_graph, get_positive_degree_nodes, get_subgraph, merge_graphs
 from ._morphological_segmentation import quasi_flat_zones, alpha_omega_constrained_connectivity
 from SST.streaming import streaming_spanning_tree
 
@@ -133,7 +133,7 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False, ret
     # generator of minimum spanning tree streaming
     mst_generator = streaming_spanning_tree(stream_generator, return_img=True)
     # minimum value for labels
-    min_val_label = 0
+    min_val_label = 1
     # residual graph
     res_graph = None
 
@@ -312,16 +312,22 @@ def marker_flooding_streaming(stream_generator, return_img=False):
 
                 _, labels = connected_components(g, directed=False)
 
+                labels += min_val_label
+
                 stable_nodes, unstable_nodes = find_stable_and_unstable_nodes(labels, e_nodes)
 
                 labels = labels[stable_nodes]
 
-                res_graph = get_residual_graph((t+e), unstable_nodes, t.shape)
                 # update res_graph and yield connected components
+                res_graph = get_residual_graph((t+e), unstable_nodes, t.shape)
+
+                # removing unstable edges from residual graph
+                res_graph = res_graph - e.multiply(e > 0)
 
         else:
             if e is None:  # last iteration
-                current_graph = t.maximum(res_graph)
+                # current_graph = t.maximum(res_graph)
+                current_graph = merge_graphs((t, res_graph))
 
                 # collecting nodes with a positive degree
                 nodes = get_all_nodes_but_well(current_graph, id_well=id_ext_node)
@@ -336,7 +342,8 @@ def marker_flooding_streaming(stream_generator, return_img=False):
                 stable_nodes = nodes
 
             else:
-                current_graph = t.maximum(e).maximum(res_graph)
+                # current_graph = t.maximum(e).maximum(res_graph)
+                current_graph = merge_graphs((t + e, res_graph))
 
                 nodes = get_all_nodes_but_well(current_graph, id_ext_node)
                 e_nodes = get_all_nodes_but_well(e, id_ext_node)
@@ -362,7 +369,10 @@ def marker_flooding_streaming(stream_generator, return_img=False):
 
                 res_graph = get_residual_graph(current_graph, nodes[unstable_nodes], t.shape)
 
-        min_val_label = labels.max() + 1
+                # removing unstable edges from residual graph
+                res_graph = res_graph - e.multiply(e > 0)
+
+        min_val_label = labels.max() + 1 if len(labels) > 0 else min_val_label + 1
 
         segmentation = np.vstack((stable_nodes, labels))
 
@@ -476,7 +486,7 @@ def alpha_omega_cc_streaming(stream_generator, alpha, omega, return_img=True):
     alpha_qfz_stream = quasi_flat_zone_streaming(stream_generator, alpha, return_img=True, return_stable_graph=True)
 
     total_val = None
-    min_val_label = 0
+    min_val_label = 1
     for n, (segmentation, img_and_map, t) in enumerate(alpha_qfz_stream):
 
         # TODO: ADD A FUNCTION TO SPLIT IMG AND MAP BETWEEN TREATED AND NOT YET TREATED PIXELS
