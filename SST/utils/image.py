@@ -17,8 +17,10 @@ def pixel_to_node(p, ishape, order='C'):
     ----------
     p: tuple
         Coordinates (i,j) of the pixel
+
     ishape: tuple
         Size of the image
+
     order : {'C', 'F', 'A'}, optional
         Read the elements of `a` using this index order, and place the
         elements into the reshaped array using this index order.  'C'
@@ -37,6 +39,7 @@ def pixel_to_node(p, ishape, order='C'):
     -------
     node: int
         Id of the corresponding node in the graph associated to image
+
     """
 
     if order == 'C':  # C-like index order
@@ -54,8 +57,10 @@ def node_to_pixel(n, ishape, order='C'):
     ----------
     n: int
         Id of the corresponding node in the graph associated to image
+
     ishape: tuple
         Size of the image
+
     order : {'C', 'F', 'A'}, optional
         Read the elements of `a` using this index order, and place the
         elements into the reshaped array using this index order.  'C'
@@ -74,6 +79,7 @@ def node_to_pixel(n, ishape, order='C'):
     -------
     node: tuple
         Coordinates of the corresponding pixel in the image
+
     """
 
     i, j = 0, 0  # initializing returning variables
@@ -97,7 +103,7 @@ def _img_to_4_connected_graph(img):
 
     Parameters
     ----------
-     img: ndarray
+    img: ndarray
         input image
 
     Returns
@@ -236,21 +242,41 @@ def img_to_graph(img, metric=None, order='C', **kwargs):
 
 def plot_graph(img, graphs,
                labels=None,
-               title="",
+               filename="",
                figsize=(8, 8),
                order='C',
                saveplot=False,
                colors=None):
     """
     Function that plots up to 5 graphs contained in the list graphs
-    :param img:
-    :param graphs: list of graph to plot
-    :param labels: labels
-    :param title:
-    :param figsize:
-    :param order:
-    :param saveplot:
-    :return:
+
+    Parameters
+    ----------
+    img: ndarray
+        Image to plot
+
+    graphs: list
+        Graphs to plot
+
+    labels: list
+        list of labels that remaps nodes in list of graphs
+
+    filename: string
+        Name of the file to save
+
+    figsize: tuple
+        Dimension of the figure to save
+
+    order : {'C', 'F', 'A', 'K'}, optional
+        'C' means to flatten in row-major (C-style) order.
+        'F' means to flatten in column-major (Fortran-style) order.
+        'A' means to flatten in column-major order if `a` is Fortran *contiguous* in memory, row-major order otherwise.
+        'K' means to flatten `a` in the order the elements occur in memory.
+        The default is 'C'
+
+    saveplot: bool
+        Set to True to save the file. Default is False.
+
     """
     # thanks to an idea of Santiago-Velasco-Forero
     if type(graphs) is not list:
@@ -280,7 +306,7 @@ def plot_graph(img, graphs,
     plt.gca()
 
     plt.imshow(img)
-
+    plt.tight_layout(pad=0)
     plt.axis('off')
 
     for i in range(n_plots):
@@ -292,10 +318,9 @@ def plot_graph(img, graphs,
             plt.plot([dx[imi], dx[jmi]], [dy[imi], dy[jmi]], '-' + colors[i])
         else:
             plt.plot([dy[imi], dy[jmi]], [dx[imi], dx[jmi]], '-' + colors[i])
-    plt.title(title)
 
     if saveplot:
-        plt.savefig(title + '_' + time.strftime('%s') + ".png")
+        plt.savefig(filename + '_' + time.strftime('%s') + ".png", bbox_inches='tight', pad_inches=0, transparent=True)
         plt.close()
     else:
         plt.show()
@@ -306,10 +331,12 @@ def plot_graph(img, graphs,
 def plot_sub_graph(img, graph, min_row, max_row, min_col, max_col, figsize=(8, 8), order='C', colors=None):
     """
     Function that plot a subgraph of the main graph
+
     Parameters
     ----------
     img: ndarray
         input image
+
     graph: csr_matrix
         input graph
 
@@ -372,9 +399,24 @@ def accumarray(indices, vals, size, func='plus', fill_value=0):
     from: https://github.com/pathak22/videoseg/blob/master/src/utils.py
     Implementing python equivalent of matlab accumarray.
     Taken from SDS repo: master/superpixel_representation.py#L36-L46
-        indices: must be a numpy array (any shape)
-        size: must be the number of diffent values
-        vals: numpy array of same shape as indices or a scalar
+
+    Parameters
+    ----------
+    indices: ndarray
+        must be a numpy array (any shape)
+
+    vals: ndarray
+        numpy array of same shape as indices or a scalar
+
+    size: int
+        must be the number of diffent values
+
+    func: {'plus', 'minus', 'times', 'max', 'min', 'and', 'or'} optional
+        Default is 'plus'
+
+    fill_value: int
+        Default is 0
+
     """
 
     # get dictionary
@@ -424,7 +466,7 @@ def label_image(img, labels, order='C'):
     # image dimensions
     nr, nc, nz = img.shape
 
-    n_cc = np.unique(labels).max() + 1
+    n_cc = labels.max() + 1
 
     s = []
     for i in range(nz):
