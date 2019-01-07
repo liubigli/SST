@@ -240,7 +240,8 @@ def img_to_graph(img, metric=None, order='C', **kwargs):
     return csr_matrix((weights, (offset + edges[0], offset + edges[1])), shape=g_shape)
 
 
-def plot_graph(img, graphs,
+def plot_graph(img,
+               graphs,
                labels=None,
                filename="",
                figsize=(8, 8),
@@ -277,6 +278,8 @@ def plot_graph(img, graphs,
     saveplot: bool
         Set to True to save the file. Default is False.
 
+    colors: list
+        list of colors for graphs. Default ['g', 'r', 'b', 'k', 'm'].
     """
     # thanks to an idea of Santiago-Velasco-Forero
     if type(graphs) is not list:
@@ -461,7 +464,28 @@ def accumarray(indices, vals, size, func='plus', fill_value=0):
 
 
 def label_image(img, labels, order='C'):
+    """
+    Function that given an image and a vector of labels for its pixels returns the corresponding segmented image
 
+    Parameters
+    ----------
+    img: nxm ndarray
+        input image
+    labels: n*m ndarray
+        Array of labels for pixels of the input image.
+
+    order : {'C', 'F', 'A', 'K'}, optional
+        'C' means to flatten in row-major (C-style) order.
+        'F' means to flatten in column-major (Fortran-style) order.
+        'A' means to flatten in column-major order if `a` is Fortran *contiguous* in memory, row-major order otherwise.
+        'K' means to flatten `a` in the order the elements occur in memory.
+        The default is 'C'.
+
+    Returns
+    -------
+    img_label: nxm ndarray
+        Resulting segmented image
+    """
     img = np.atleast_3d(img)
     # image dimensions
     nr, nc, nz = img.shape
