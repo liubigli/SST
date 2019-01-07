@@ -45,7 +45,6 @@ class TestGenerators(object):
 
             # shape of current image
             c_nr, c_nc = curr_img.shape[:2]
-            print(c_nr + n )
 
             if (c_nc + n) % block_shape[1] == 0:
                 assert i.shape[:2] == block_shape
@@ -78,7 +77,7 @@ class TestGenerators(object):
 
             # shape of current image
             c_nr, c_nc = curr_img.shape[:2]
-            print(c_nr + n)
+
             if (c_nr + n) % block_shape[0] == 0:
                 assert i.shape[:2] == block_shape
                 assert g.shape[0] == c_nr * c_nc
