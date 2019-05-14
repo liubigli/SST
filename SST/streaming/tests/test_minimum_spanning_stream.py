@@ -4,7 +4,7 @@ from scipy.sparse.csgraph import minimum_spanning_tree, connected_components
 
 from SST.utils import img_to_graph, stick_two_images, resize_graph
 from SST.streaming.streaming_generators import HorizontalStreaming
-from SST.streaming import streaming_spanning_tree
+from SST.streaming import streaming_spanning_tree_v2
 
 
 def test_minimum_spanning_stream():
@@ -20,7 +20,7 @@ def test_minimum_spanning_stream():
     curr_img = None
     stable_graph = None
 
-    for n, (t, e, i) in enumerate(streaming_spanning_tree(stream, return_img=True)):
+    for n, (t, e, i) in enumerate(streaming_spanning_tree_v2(stream, return_img=True)):
         if n == 0:
             curr_img = i
             stable_graph = t

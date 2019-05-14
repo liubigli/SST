@@ -8,7 +8,7 @@ from scipy.sparse.csgraph import connected_components
 
 from SST.utils import resize_graph, get_positive_degree_nodes, get_subgraph, merge_graphs
 from ._morphological_segmentation import quasi_flat_zones, alpha_omega_constrained_connectivity
-from SST.streaming import streaming_spanning_tree
+from SST.streaming import streaming_spanning_tree_v2
 
 
 def map_nodes_to_sub_graph(graph, node_map):
@@ -131,7 +131,7 @@ def quasi_flat_zone_streaming(stream_generator, threshold, return_img=False, ret
 
     """
     # generator of minimum spanning tree streaming
-    mst_generator = streaming_spanning_tree(stream_generator, return_img=True)
+    mst_generator = streaming_spanning_tree_v2(stream_generator, return_img=True)
     # minimum value for labels
     min_val_label = 1
     # residual graph
@@ -284,7 +284,7 @@ def marker_flooding_streaming(stream_generator, return_img=False):
         If true at each iteration the function yields also the current image in the streaming
     """
     # TODO: probably this code can be merged with the one in quasi_flat_zone_streaming
-    mst_generator = streaming_spanning_tree(stream_generator, return_img=True)
+    mst_generator = streaming_spanning_tree_v2(stream_generator, return_img=True)
 
     # residual graph
     res_graph = None
