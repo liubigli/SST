@@ -571,3 +571,148 @@ def stick_two_images(img1, img2, num_overlapping=0, direction='H'):
 
     else:
         raise ValueError('Direction of merging not known')
+
+
+def add_circle(img, center, radius):
+    from PIL import Image, ImageDraw
+    new_img = Image.fromarray(img)
+    draw = ImageDraw.Draw(new_img)
+    draw.ellipse((center[0]-radius, center[1]-radius, center[0]+radius, center[1] + radius),
+                 fill='white', outline='white')
+    img = np.array(new_img)
+    return img
+
+
+def generate_random_pois(shape, n_circles, return_size_radii=False):
+    """
+
+    Parameters
+    ----------
+    shape: tuple
+        image shape
+    n_circles: int
+        number of circles to
+    return_size_radii:
+
+    Return
+    ------
+    """
+    nr, nc = shape[:2]
+    # in order to avoid empty circles we put a frame of 10% of image size where the center of any
+    # circle cannot fall into
+    r_frame = nr // 10
+    c_frame = nc // 10
+    r_centers = np.random.randint(r_frame, nr - r_frame, size=n_circles)
+    c_centers = np.random.randint(c_frame, nc - c_frame, size=n_circles)
+    centers = np.c_[r_centers, c_centers]
+    radii = np.zeros(n_circles)
+
+    from sklearn.neighbors import NearestNeighbors
+    nbrs = NearestNeighbors(n_neighbors=2, algorithm='ball_tree').fit(centers)
+    distances, indices = nbrs.kneighbors(centers)
+    img = np.zeros((nr, nc), dtype=np.uint8)
+    for i in range(n_circles):
+        max_radius = min(centers[i, 0], centers[i, 1], nr - centers[i, 0], nc - centers[i, 1], distances[i, 1]) // 2
+        if max_radius > 1:
+            radii[i] = np.random.randint(1, max_radius)
+        else:
+            radii[i] = 1
+
+        img = add_circle(img, centers[i], radii[i])
+
+    if return_size_radii:
+        return img, radii
+
+    return img
+
+
+def generate_pathological_bad_example(shape):
+    """
+    Utils functions that generate a pathological example for our streaming algorithm that will make our
+    algorithm explode. Basically a particular case when the unstable edges in the MST
+    are at each iteration all the image graph. The final MST can be represented as follow
+      |<----------------------------------------------- IMAGE COLUMNS ----------------------------------------------->|
+
+    = x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x
+    I |
+    M |
+    A |
+    G x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x
+    E |
+      |
+    R |
+    O x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x
+    W |
+    S |
+      |
+    = x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x
+
+    |<-------IMAGE BLOCK------->|<-------IMAGE BLOCK------->|<-------IMAGE BLOCK------->|<-------IMAGE BLOCK------->|
+
+    In order to obtain this MST we need an image with special values. Essentially, the image is constant along the rows
+    except for the pixels in the first column. We choose pixel's values in the first column in order that weights of
+    edges between two pixels in the first columns is smaller than any weight between two pixels in different rows.
+
+              n*d
+        I(P0) --- I(P1)
+          |         |
+        d |         | 1
+          |         |
+        I(P2) --- I(P3)
+            (n-1)*d
+
+
+    Parameters
+    ----------
+    shape: tuple
+        Image size
+
+    Return
+    ------
+    img: ndarray
+        Pathological image that make streaming_spanning_tree methods explode
+    """
+
+    nr, nc = shape[:2]
+
+    img = np.repeat(np.arange(nr), nc).reshape(nr, nc)
+    img = img.astype(np.float64)
+    # getting n
+    n = nr // 2
+    # small delta
+    delta = 1 / (2 * n)
+    it = np.arange(n, 0, -1)
+
+    if nr % 2 == 0:
+        img[:n, 0] += it*delta + delta/2
+        img[n:, 0] += (-it[::-1]*delta - delta/2)
+    else:
+        img[:n, 0] += (it * delta)
+        img[(n+1):, 0] += (-it[::-1]*delta)
+
+    return img
+
+
+def generate_pathological_good_example(shape):
+    """
+    Function that returns a particularly good image for streaming_spanning_tree methods. In fact this image is constant
+    along the columns and the edges_in_cycles during the streaming operation is the smallest possible graph.
+
+    Parameters
+    ----------
+    shape: tuple
+        Shape of the output image
+
+    Returns
+    -------
+    img: ndarray
+        Pathological example that works perfectly for streaming_spanning_tree methods
+    """
+
+    nr, nc = shape[:2]
+    n = nc // 2
+    k = nc % 2
+    # the image that we generate contains only 0 and 1
+    img = np.repeat(np.concatenate((n*[0, 1], k*[0])), nr).reshape((nr, nc), order='F')
+
+    return img
