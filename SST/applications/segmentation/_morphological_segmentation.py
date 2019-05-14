@@ -113,6 +113,9 @@ def alpha_omega_constrained_connectivity(minimum_spanning_tree, pixels_values, a
     from SST.hierarchy._mst_based_hierarchy import hierarchy_from_mst, COL_W, COL_RNG, COL_V1, COL_V2
     from scipy.sparse import csr_matrix
 
+    if len(pixels_values.shape) > 1:
+        pixels_values = pixels_values.flatten()
+
     hierarchy = hierarchy_from_mst(minimum_spanning_tree, pixels_values)
 
     alpha_omega = hierarchy[np.logical_and(hierarchy[:,COL_W] < alpha, hierarchy[:, COL_RNG] < omega)]
